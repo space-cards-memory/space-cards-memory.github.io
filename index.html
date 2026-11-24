@@ -2368,6 +2368,8 @@ Object.assign(I18N.fr, {webDlTitle: "Traduction automatique sur cet ordinateur",
 Object.assign(I18N.en, {webDlTitle: "Automatic translation on this computer", webDlHelp: "Your browser can translate on the computer itself, without sending anything online. It must first download the language, once.", webDlBtn: "Turn on translation", webDlBusy: "Downloading the language…", webDlReady: "Language ready: translating now.", webDlFail: "The download did not work. Translation will use the online service (adults only)."});
 Object.assign(I18N.fr, {mtYesWeb: "✓ sur l'ordinateur avec Chrome ou Edge (sans rien envoyer) ; sinon par un service gratuit en ligne, pour les adultes"});
 Object.assign(I18N.en, {mtYesWeb: "✓ on the computer with Chrome or Edge (nothing sent); otherwise through a free online service, for adults"});
+Object.assign(I18N.fr, {voiceTitle: "Voix", voiceHelp: "Choisis la voix de chaque langue et écoute-la avec ▶. Les voix marquées ★ sont les plus naturelles. Pour en avoir d'autres sur iPhone, iPad ou Mac : Réglages de l'appareil › Accessibilité › Contenu énoncé › Voix, puis ferme et rouvre l'app.", voiceTest: "Écouter", voiceNone: "Aucune voix sur cet appareil pour cette langue (tes enregistrements restent lus)."});
+Object.assign(I18N.en, {voiceTitle: "Voices", voiceHelp: "Choose the voice for each language and listen with ▶. Voices marked ★ sound most natural. For more voices on iPhone, iPad or Mac: device Settings › Accessibility › Spoken Content › Voices, then close and reopen the app.", voiceTest: "Listen", voiceNone: "No voice on this device for this language (your recordings are still played)."});
 Object.assign(I18N.fr, {calStaleTitle: "Tes créneaux ont changé", calStaleHelp: "Ton calendrier a encore les anciens rappels, et l'app ne peut pas les effacer elle-même. Dans l'app Calendrier : Calendriers › ⓘ à côté de « Space Cards » › Supprimer le calendrier, puis recrée un calendrier « Space Cards ». Ensuite, touche le bouton ci-dessous et range les nouveaux rappels dans ce calendrier.", calStaleBtn: "Mettre à jour mes rappels", calStaleSkip: "Je n'utilise pas le calendrier"});
 Object.assign(I18N.en, {calStaleTitle: "Your time slots have changed", calStaleHelp: "Your calendar still has the old reminders, and the app cannot delete them itself. In the Calendar app: Calendars › ⓘ next to \"Space Cards\" › Delete Calendar, then create a \"Space Cards\" calendar again. Then tap the button below and put the new reminders in that calendar.", calStaleBtn: "Update my reminders", calStaleSkip: "I don't use the calendar"});
 Object.assign(I18N.fr, {remindBtn: (h, r) => `Me rappeler ma prochaine révision à ${h} (${r})`, remindEvent: "🔁 Space Cards : révision à faire", remindDone: "Ouvre le fichier et touche « Ajouter » : ton calendrier sonnera à l'heure."});
@@ -2378,7 +2380,7 @@ Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhon
 const M = 60e3, H = 60 * M, D = 24 * H;
 const IV = [10*M, H, D, 2*D, 5*D, 8*D, 15*D, 21*D, 30*D, 45*D, 60*D, 90*D, 180*D, 365*D];
 const APP = "Space Cards Memory";
-const BUILD = "2026-11-24 15:15";
+const BUILD = "2026-11-24 16:30";
 /* extension points used by optional modules (the personal build adds the recall table) */
 const EXT = {views:{}, noNav:["age"], notifs:[], actions:{}, actionTypes:[], label:"", navOf:{}};
 /* code, endonym, speech locale */
@@ -2505,7 +2507,35 @@ function load(){
   if (!d || (!Array.isArray(d.cards) && !Array.isArray(d.courses))) d = fresh();
   adopt(d);
 }
-function save(){ if (isSubj()) S.cards.forEach(c => { if (isCloze(c)) c.t[TK()] = clozeAns(c); }); try { localStorage.setItem(KEY, serialize()); storageOk = true; } catch(e){ storageOk = false; } scheduleNotifs(); if (typeof autoTranslate === "function" && !mtBusy) setTimeout(autoTranslate, 500); }
+/* On iPhone/iPad, an app added to the home screen can lose what was just written to localStorage when it is closed
+   right away: a second copy goes to IndexedDB, and the newest of the two is used at start-up. */
+let stDB = null, stTimer = 0;
+function stOpen(){ return stDB || (stDB = new Promise((res, rej) => { const r = indexedDB.open("hitzak-state", 1); r.onupgradeneeded = () => r.result.createObjectStore("s"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); })); }
+async function stPut(raw){
+  if (Native || !window.indexedDB) return;
+  try { const db = await stOpen(); await new Promise((res, rej) => { const tx = db.transaction("s", "readwrite"); tx.objectStore("s").put({at: Date.now(), raw}, "main"); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch(e){}
+}
+async function stGet(){
+  if (Native || !window.indexedDB) return null;
+  try { const db = await stOpen(); return await new Promise(res => { const r = db.transaction("s").objectStore("s").get("main"); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); }); } catch(e){ return null; }
+}
+function stSoon(){ if (Native) return; clearTimeout(stTimer); stTimer = setTimeout(() => stPut(serialize()), 300); }
+function stNow(){ if (Native) return; clearTimeout(stTimer); stPut(serialize()); }
+async function stRecover(){
+  const x = await stGet(); if (!x || !x.raw) return;
+  let lsAt = 0; try { lsAt = +localStorage.getItem(KEY + "-at") || 0; } catch(e){}
+  if (x.at <= lsAt + 1000) return;
+  try { const d = JSON.parse(x.raw); if (!d || (!Array.isArray(d.cards) && !Array.isArray(d.courses))) return; adopt(d); } catch(e){ return; }
+  try { localStorage.setItem(KEY, x.raw); localStorage.setItem(KEY + "-at", String(x.at)); } catch(e){}
+  render();
+}
+function stInit(){
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stNow(); });
+  window.addEventListener("pagehide", stNow);
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
+  stRecover();
+}
+function save(){ if (isSubj()) S.cards.forEach(c => { if (isCloze(c)) c.t[TK()] = clozeAns(c); }); try { localStorage.setItem(KEY, serialize()); localStorage.setItem(KEY + "-at", String(Date.now())); storageOk = true; } catch(e){ storageOk = false; } stSoon(); scheduleNotifs(); if (typeof autoTranslate === "function" && !mtBusy) setTimeout(autoTranslate, 500); }
 function dayLog(ms){ const k = dayKey(ms); return S.log[k] || (S.log[k] = {newCount:0}); }
 
 /* ---------- Courses and the smoothed stock ---------- */
@@ -2928,6 +2958,43 @@ async function computeCaps(code){
 }
 function stopSpeech(){ try { const P = plug("TextToSpeech"); if (P) P.stop(); else if (window.speechSynthesis) speechSynthesis.cancel(); } catch(e){} }
 /* quiet = automatic playback during a review: no message when no voice is available (audio is optional) */
+/* the voice for a language: the one chosen in Settings, otherwise the best one (Premium, Enhanced…), never a novelty voice */
+const ODD_VOICES = /albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|deranged|hysterical|fred|junior|ralph|kathy|grandma|grandpa|rocko|shelley|flo|eddy|reed|sandy/i;
+function voicesFor(code, all){ return (all || []).filter(x => (x.lang || "").toLowerCase().replace("_", "-").startsWith(code)); }
+function pickVoice(code, all){
+  const list = voicesFor(code, all); if (!list.length) return null;
+  const want = S.voices && S.voices[code], chosen = want && list.find(x => x.voiceURI === want);
+  if (chosen) return chosen;
+  const score = x => (/premium/i.test(x.name) ? 4 : 0) + (/enhanced|amélior|erweitert|mejorad|miglior|melhorad/i.test(x.name) ? 3 : 0) + (x.default ? 1 : 0) + (x.localService ? 1 : 0) - (ODD_VOICES.test(x.name) ? 10 : 0);
+  return list.slice().sort((a, b) => score(b) - score(a))[0];
+}
+const VOICE_SAMPLE = {fr: "Bonjour, je suis ta voix.", en: "Hello, I am your voice.", es: "Hola, soy tu voz.", de: "Hallo, ich bin deine Stimme.", it: "Ciao, sono la tua voce.", pt: "Olá, sou a tua voz.", ar: "مَرْحَبًا، أَنَا صَوْتُكَ.", tr: "Merhaba, ben senin sesinim.", eu: "Kaixo, zure ahotsa naiz.", nl: "Hallo, ik ben je stem.", ru: "Привет, я твой голос.", zh: "你好，我是你的声音。", ja: "こんにちは、あなたの声です。"};
+function voiceCodes(){
+  const set = new Set([SK()]);
+  ((S.courses && S.courses.length) ? S.courses.map(c => c.id === S.active ? {set: S.settings} : c) : [{set: S.settings}]).forEach(c => { const t = c.set && c.set.target; if (t) set.add(t.subject ? (t.voice || SK()) : t.code); if (c.set && c.set.source) set.add(c.set.source.code); });
+  return [...set].filter(Boolean);
+}
+let voiceList = null;
+function voiceSettings(){
+  if (Native || !window.speechSynthesis) return "";
+  if (!voiceList){ webVoices().then(v => { voiceList = v; if (view === "settings") render(); }); return ""; }
+  const rows = voiceCodes().map(code => {
+    const list = voicesFor(code, voiceList), cur = pickVoice(code, voiceList);
+    if (!list.length) return `<div class="field"><span class="label">${esc(langName(code, null, false))}</span><p class="muted small" style="margin:0">${T("voiceNone")}</p></div>`;
+    return `<div class="field"><label for="vo-${code}">${esc(langName(code, null, false))}</label><div class="row" style="gap:8px"><select id="vo-${code}" style="flex:1">${list.map(x => `<option value="${esc(x.voiceURI)}" ${cur && x.voiceURI === cur.voiceURI ? "selected" : ""}>${esc(x.name)}${/premium|enhanced|amélior/i.test(x.name) ? " ★" : ""}</option>`).join("")}</select><button class="btn secondary small" data-act="voiceTest" data-code="${code}" aria-label="${T("voiceTest")}">▶</button></div></div>`;
+  }).join("");
+  return fold("set-voices", "🔊 " + T("voiceTitle"), `<p class="muted small">${T("voiceHelp")}</p>${rows}<button class="btn secondary" data-act="saveVoices">${T("save")}</button>`);
+}
+function voiceTest(code){
+  const sel = document.getElementById("vo-" + code), v = (voiceList || []).find(x => x.voiceURI === (sel && sel.value)); if (!v) return;
+  const u = new SpeechSynthesisUtterance(VOICE_SAMPLE[code] || "1, 2, 3"); u.lang = bcp(code); u.voice = v; u.rate = 0.9;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+function saveVoices(){
+  S.voices = S.voices || {};
+  voiceCodes().forEach(code => { const sel = document.getElementById("vo-" + code); if (sel) S.voices[code] = sel.value; });
+  save(); toast(T("settingsSaved"));
+}
 async function speak(text, code, quiet){
   text = String(text || "").trim(); if (!text) return false;
   const c = await getCaps(code);
@@ -2938,7 +3005,7 @@ async function speak(text, code, quiet){
     if (P){ await P.stop().catch(() => {}); await P.speak({text, lang: bcp(code), rate: 0.9, category: "playback"}); return true; }
     if (window.speechSynthesis){
       const u = new SpeechSynthesisUtterance(text); u.lang = bcp(code);
-      const v = (await webVoices()).find(x => (x.lang || "").toLowerCase().replace("_", "-").startsWith(code)); if (v) u.voice = v;
+      const v = pickVoice(code, await webVoices()); if (v) u.voice = v;
       speechSynthesis.cancel(); speechSynthesis.speak(u); return true;
     }
   } catch(e){}
@@ -3775,6 +3842,7 @@ function renderSettings(){
       <div class="field"><label for="s-cap">${T("capLbl")}</label><input type="number" id="s-cap" min="5" max="25" value="${S.settings.cap}"></div>
       <button class="btn secondary" data-act="saveSettings">${T("save")}</button>`)}
     ${grpSettings()}
+    ${voiceSettings()}
     ${budgetSettings()}
     ${fold("set-notifs", T("notifs"), `
       <p class="muted">${T("notifsHelp")}</p>
@@ -3919,6 +3987,8 @@ document.addEventListener("click", async e => {
   if (a === "relearnCur") return relearnCur();
   if (a === "webDl") return webDownload();
   if (a === "calExport") return calExport();
+  if (a === "voiceTest") return voiceTest(t.dataset.code);
+  if (a === "saveVoices") return saveVoices();
   if (a === "calStaleOff"){ S.calStale = false; save(); return render(); }
   if (a === "remindNext") return remindNext(t.dataset.at);
   if (a === "relearnHard"){ const n = relearnIds(S.cards.filter(isHard).map(c => c.id)); save(); render(); return toast(T("relearnDone", n)); }
@@ -5475,7 +5545,7 @@ if (!Native && (location.protocol === "https:" || location.hostname === "localho
   [["manifest", "manifest.webmanifest"], ["apple-touch-icon", "icon-192.png"]].forEach(([rel, href]) => { const l = document.createElement("link"); l.rel = rel; l.href = href; document.head.appendChild(l); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-load(); render(); nativeInit(); if (!Native){ setTimeout(slimAllImages, 8000); setTimeout(autoTranslate, 3000); document.addEventListener("visibilitychange", () => { if (!document.hidden) autoTranslate(); }); }
+load(); render(); nativeInit(); if (!Native) stInit(); if (!Native){ setTimeout(slimAllImages, 8000); setTimeout(autoTranslate, 3000); document.addEventListener("visibilitychange", () => { if (!document.hidden) autoTranslate(); }); }
 
 </script>
 
