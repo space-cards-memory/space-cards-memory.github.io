@@ -2390,7 +2390,7 @@ Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhon
 const M = 60e3, H = 60 * M, D = 24 * H;
 const IV = [10*M, H, D, 2*D, 5*D, 8*D, 15*D, 21*D, 30*D, 45*D, 60*D, 90*D, 180*D, 365*D];
 const APP = "Space Cards Memory";
-const BUILD = "2026-11-24 20:00";
+const BUILD = "2026-11-24 20:30";
 /* extension points used by optional modules (the personal build adds the recall table) */
 const EXT = {views:{}, noNav:["age"], notifs:[], actions:{}, actionTypes:[], label:"", navOf:{}};
 /* code, endonym, speech locale */
@@ -3005,15 +3005,24 @@ async function hear(){
     finally { withTimeout(R.stop(), 1000, null); }
   }
   const W = window.SpeechRecognition || window.webkitSpeechRecognition; if (!W) return "nomic";
+  /* iPhone / iPad: let the voice finish before opening the microphone, keep listening for 8 s,
+     and start again if Apple stops listening too early */
+  await hfSleep(500);
   return new Promise(resolve => {
-    let done = false; const fin = v => { if (!done){ done = true; try { r.stop(); } catch(e){} resolve(v); } };
-    const r = new W(); r.lang = lang; r.maxAlternatives = 5; r.interimResults = true; r.continuous = false;
-    r.onresult = e => { for (let i = e.resultIndex || 0; i < e.results.length; i++){ const al = [...e.results[i]].map(a => a.transcript); hf.heard = al[0] || ""; const k = hfParse(al); if (k) return fin(k); } };
-    r.onerror = e => { hf.err = (e && e.error) || "?"; if (view === "session") render(); fin(e && e.error === "not-allowed" ? "nomic" : null); };
-    r.onaudiostart = () => { hf.err = ""; hf.mic = true; if (view === "session") render(); };
-    r.onend = () => fin(null);
-    try { r.start(); } catch(e){ hf.err = "start: " + (e && e.message || e); fin(null); }
-    setTimeout(() => fin(null), 8000);
+    let done = false, r = null; const until = Date.now() + 8000;
+    const fin = v => { if (!done){ done = true; try { r && r.abort ? r.abort() : r && r.stop(); } catch(e){} resolve(v); } };
+    const go = () => {
+      if (done) return;
+      if (Date.now() > until) return fin(null);
+      r = new W(); r.lang = lang; r.maxAlternatives = 5; r.interimResults = true; r.continuous = true;
+      r.onresult = e => { for (let i = e.resultIndex || 0; i < e.results.length; i++){ const al = [...e.results[i]].map(a => a.transcript); hf.heard = al[0] || ""; const k = hfParse(al); if (k) return fin(k); } if (view === "session") render(); };
+      r.onerror = e => { const er = (e && e.error) || "?"; if (er === "not-allowed" || er === "service-not-allowed"){ hf.err = er; if (view === "session") render(); return fin(er === "not-allowed" ? "nomic" : null); } if (er !== "no-speech" && er !== "aborted"){ hf.err = er; if (view === "session") render(); } };
+      r.onaudiostart = () => { hf.err = ""; };
+      r.onend = () => { if (!done) setTimeout(go, 250); };
+      try { r.start(); } catch(e){ hf.err = "start: " + (e && e.message || e); setTimeout(go, 400); }
+    };
+    go();
+    setTimeout(() => fin(null), 8500);
   });
 }
 /* while listening, big buttons still work (for anyone not driving) */
