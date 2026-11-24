@@ -2390,7 +2390,7 @@ Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhon
 const M = 60e3, H = 60 * M, D = 24 * H;
 const IV = [10*M, H, D, 2*D, 5*D, 8*D, 15*D, 21*D, 30*D, 45*D, 60*D, 90*D, 180*D, 365*D];
 const APP = "Space Cards Memory";
-const BUILD = "2026-11-24 19:30";
+const BUILD = "2026-11-24 20:00";
 /* extension points used by optional modules (the personal build adds the recall table) */
 const EXT = {views:{}, noNav:["age"], notifs:[], actions:{}, actionTypes:[], label:"", navOf:{}};
 /* code, endonym, speech locale */
@@ -2924,6 +2924,20 @@ async function applyAud(c){
 function resetAud(){ if (rec) { rec.onstop = null; try { rec.stop(); } catch(e){} recStream && recStream.getTracks().forEach(t => t.stop()); rec = null; clearInterval(recTick); } formAud = {blob:null, removed:false}; }
 
 
+/* Apple's voice drops an utterance spoken right after cancel(): cancel only when busy, then wait a moment */
+function ssSpeak(u){
+  try {
+    const busy = speechSynthesis.speaking || speechSynthesis.pending;
+    if (busy){ speechSynthesis.cancel(); setTimeout(() => { speechSynthesis.speak(u); }, 120); }
+    else speechSynthesis.speak(u);
+    if (speechSynthesis.paused) speechSynthesis.resume();
+  } catch(e){}
+}
+/* Apple only lets a page speak if the first sound starts with a tap: call this inside the tap */
+function unlockAudio(){
+  try { if (window.speechSynthesis){ const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } } catch(e){}
+  try { const a = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="); a.play().catch(() => {}); } catch(e){}
+}
 /* ---------- Hands-free reviews (driving, walking…): the app reads the question, gives time to answer aloud,
    reads the answer, then listens for "oui" / "non". Only the yes/no is recognised: the user judges. ---------- */
 const hf = {on: false, tok: 0, state: "", until: 0, lock: null};
@@ -2940,7 +2954,7 @@ async function sayWait(text, code){
     if (window.speechSynthesis){
       const u = new SpeechSynthesisUtterance(text); u.lang = bcp(code); u.rate = 0.95;
       const v = pickVoice(code, await webVoices()); if (v) u.voice = v;
-      await new Promise(res => { u.onend = res; u.onerror = res; speechSynthesis.cancel(); speechSynthesis.speak(u); setTimeout(res, 2500 + text.length * 120); });
+      await new Promise(res => { u.onend = res; u.onerror = res; ssSpeak(u); setTimeout(res, 2500 + text.length * 120); });
       return true;
     }
   } catch(e){}
@@ -2995,9 +3009,10 @@ async function hear(){
     let done = false; const fin = v => { if (!done){ done = true; try { r.stop(); } catch(e){} resolve(v); } };
     const r = new W(); r.lang = lang; r.maxAlternatives = 5; r.interimResults = true; r.continuous = false;
     r.onresult = e => { for (let i = e.resultIndex || 0; i < e.results.length; i++){ const al = [...e.results[i]].map(a => a.transcript); hf.heard = al[0] || ""; const k = hfParse(al); if (k) return fin(k); } };
-    r.onerror = e => fin(e && e.error === "not-allowed" ? "nomic" : null);
+    r.onerror = e => { hf.err = (e && e.error) || "?"; if (view === "session") render(); fin(e && e.error === "not-allowed" ? "nomic" : null); };
+    r.onaudiostart = () => { hf.err = ""; hf.mic = true; if (view === "session") render(); };
     r.onend = () => fin(null);
-    try { r.start(); } catch(e){ fin(null); }
+    try { r.start(); } catch(e){ hf.err = "start: " + (e && e.message || e); fin(null); }
     setTimeout(() => fin(null), 8000);
   });
 }
@@ -3049,6 +3064,7 @@ function hfBanner(){
   const msg = {q: T("hfStQ"), think: T("hfStThink"), a: T("hfStA"), listen: T("hfStListen"), wait: T("hfStWait")}[hf.state] || "";
   return `<div class="banner stack" style="gap:6px"><strong>🎧 ${T("hfTitle")}</strong><p class="big" style="margin:0;font-size:1.3rem">${msg}</p>
     ${hf.heard ? `<p class="small" style="margin:0">👂 ${T("hfHeard")} « ${esc(hf.heard)} »</p>` : ""}
+    ${hf.err ? `<p class="small muted" style="margin:0">⚠️ ${esc(hf.err)}</p>` : ""}
     ${hf.state === "listen" ? `<div class="gradebar"><button class="ok" data-act="hfOk">✓ ${T("knewIt")}</button><button class="ko" data-act="hfKo">✗ ${T("toReviewAgain")}</button></div>` : ""}
     <p class="muted small" style="margin:0">${T("hfHelp")}</p><button class="btn secondary block" data-act="hfStop">⏹ ${T("hfStopBtn")}</button></div>`;
 }
@@ -3135,7 +3151,7 @@ function voiceSettings(){
 function voiceTest(code){
   const sel = document.getElementById("vo-" + code), v = (voiceList || []).find(x => x.voiceURI === (sel && sel.value)); if (!v) return;
   const u = new SpeechSynthesisUtterance(VOICE_SAMPLE[code] || "1, 2, 3"); u.lang = bcp(code); u.voice = v; u.rate = 0.9;
-  speechSynthesis.cancel(); speechSynthesis.speak(u);
+  ssSpeak(u);
 }
 function saveVoices(){
   S.voices = S.voices || {};
@@ -3153,7 +3169,7 @@ async function speak(text, code, quiet){
     if (window.speechSynthesis){
       const u = new SpeechSynthesisUtterance(text); u.lang = bcp(code);
       const v = pickVoice(code, await webVoices()); if (v) u.voice = v;
-      speechSynthesis.cancel(); speechSynthesis.speak(u); return true;
+      ssSpeak(u); return true;
     }
   } catch(e){}
   if (!quiet) toast(T("noVoice", langName(code, null, false))); return false;
@@ -4126,8 +4142,8 @@ document.addEventListener("click", async e => {
   if (a === "exact") return nativeExact();
   if (a === "dismissCourse"){ const lc = lastCourse(Date.now()); if (lc) S.dismissedCourse = lc.at; save(); return render(); }
   if (a === "errClose"){ const b = document.getElementById("errbox"); if (b) b.remove(); return; }
-  if (a === "start") return startSession();
-  if (a === "startHF"){ hf.on = true; startSession(); if (sess && !sess.ended && sess.cur) hfBegin(); else { hf.on = false; toast(T("hfNothing")); } return; }
+  if (a === "start"){ unlockAudio(); return startSession(); }
+  if (a === "startHF"){ unlockAudio(); hf.on = true; startSession(); if (sess && !sess.ended && sess.cur) hfBegin(); else { hf.on = false; toast(T("hfNothing")); } return; }
   if (a === "hfStop") return hfStop();
   if (a === "hfOk") return hfTap("ok");
   if (a === "hfKo") return hfTap("ko");
