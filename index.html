@@ -2368,6 +2368,8 @@ Object.assign(I18N.fr, {webDlTitle: "Traduction automatique sur cet ordinateur",
 Object.assign(I18N.en, {webDlTitle: "Automatic translation on this computer", webDlHelp: "Your browser can translate on the computer itself, without sending anything online. It must first download the language, once.", webDlBtn: "Turn on translation", webDlBusy: "Downloading the language…", webDlReady: "Language ready: translating now.", webDlFail: "The download did not work. Translation will use the online service (adults only)."});
 Object.assign(I18N.fr, {mtYesWeb: "✓ sur l'ordinateur avec Chrome ou Edge (sans rien envoyer) ; sinon par un service gratuit en ligne, pour les adultes"});
 Object.assign(I18N.en, {mtYesWeb: "✓ on the computer with Chrome or Edge (nothing sent); otherwise through a free online service, for adults"});
+Object.assign(I18N.fr, {hfHeard: "J'ai entendu :"});
+Object.assign(I18N.en, {hfHeard: "I heard:"});
 Object.assign(I18N.fr, {hfTitle: "Mains libres", hfStart: "Réviser les mains libres", hfWaitLbl: "Temps pour répondre", hfPrepHelp: "L'app lit la question, te laisse le temps de répondre à voix haute, lit la réponse, puis te demande : dis « oui » si tu savais, « non » sinon. « Répète » pour réécouter, « stop » pour arrêter. En voiture, ne regarde pas l'écran.", hfIntro: "Mode mains libres. Après chaque réponse, dis oui si tu savais, non sinon. Dis répète pour réécouter, ou stop pour arrêter.", hfAsk: "Tu savais ?", hfAgain: "Je n'ai pas compris. Dis oui ou non.", hfOk: "Bravo.", hfKo: "D'accord, on la reverra.", hfAssumeKo: "Je n'ai pas compris, je la remets à revoir.", hfEnd: "Séance terminée. Bravo !", hfStQ: "🔊 Écoute la question…", hfStThink: "💭 À toi de répondre…", hfStA: "🔊 La réponse…", hfStListen: "🎤 Dis « oui » ou « non »", hfStWait: "⏳ Prochaine carte dans un instant…", hfHelp: "« répète » pour réécouter · « stop » pour arrêter", hfStopBtn: "Arrêter les mains libres", hfNoMic: "Le micro n'est pas disponible : mains libres arrêté.", hfNothing: "Rien à réviser pour l'instant."});
 Object.assign(I18N.en, {hfTitle: "Hands-free", hfStart: "Review hands-free", hfWaitLbl: "Time to answer", hfPrepHelp: "The app reads the question, gives you time to answer aloud, reads the answer, then asks: say \"yes\" if you knew it, \"no\" otherwise. \"Repeat\" to hear it again, \"stop\" to end. While driving, don't look at the screen.", hfIntro: "Hands-free mode. After each answer, say yes if you knew it, no otherwise. Say repeat to hear it again, or stop to end.", hfAsk: "Did you know it?", hfAgain: "I didn't understand. Say yes or no.", hfOk: "Well done.", hfKo: "Okay, we'll see it again.", hfAssumeKo: "I didn't understand, I'll put it back for review.", hfEnd: "Session over. Well done!", hfStQ: "🔊 Listen to the question…", hfStThink: "💭 Your turn to answer…", hfStA: "🔊 The answer…", hfStListen: "🎤 Say \"yes\" or \"no\"", hfStWait: "⏳ Next card in a moment…", hfHelp: "\"repeat\" to hear again · \"stop\" to end", hfStopBtn: "Stop hands-free", hfNoMic: "The microphone is not available: hands-free stopped.", hfNothing: "Nothing to review right now."});
 Object.assign(I18N.fr, {voiceTitle: "Voix", voiceHelp: "Choisis la voix de chaque langue et écoute-la avec ▶. Les voix marquées ★ sont les plus naturelles. Pour en avoir d'autres sur iPhone, iPad ou Mac : Réglages de l'appareil › Accessibilité › Contenu énoncé › Voix, puis ferme et rouvre l'app.", voiceTest: "Écouter", voiceNone: "Aucune voix sur cet appareil pour cette langue (tes enregistrements restent lus)."});
@@ -2382,7 +2384,7 @@ Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhon
 const M = 60e3, H = 60 * M, D = 24 * H;
 const IV = [10*M, H, D, 2*D, 5*D, 8*D, 15*D, 21*D, 30*D, 45*D, 60*D, 90*D, 180*D, 365*D];
 const APP = "Space Cards Memory";
-const BUILD = "2026-11-24 18:15";
+const BUILD = "2026-11-24 19:00";
 /* extension points used by optional modules (the personal build adds the recall table) */
 const EXT = {views:{}, noNav:["age"], notifs:[], actions:{}, actionTypes:[], label:"", navOf:{}};
 /* code, endonym, speech locale */
@@ -2928,7 +2930,7 @@ async function sayWait(text, code){
   const P = plug("TextToSpeech");
   try {
     if (player) player.pause();
-    if (P){ await P.stop().catch(() => {}); await P.speak({text, lang: bcp(code), rate: 0.9, category: "playback"}); return true; }
+    if (P){ await withTimeout(P.stop(), 1000, null); await withTimeout(P.speak({text, lang: bcp(code), rate: 0.9, category: "playback"}), 4000 + text.length * 150, null); return true; }
     if (window.speechSynthesis){
       const u = new SpeechSynthesisUtterance(text); u.lang = bcp(code); u.rate = 0.95;
       const v = pickVoice(code, await webVoices()); if (v) u.voice = v;
@@ -2970,28 +2972,22 @@ function hfParse(list){
 async function hear(){
   const lang = bcp(UI === "ar" || UI === "tr" ? "fr" : UI), R = plug("SpeechRecognition");
   if (R){
-    /* Android: listen to partial results and stop as soon as "oui" / "non" is heard (the final result does not always come back) */
-    let got = null, ended = false, hp = null, hs = null;
+    /* Android: Google's listening window, the same one as dictation (reliable); every step has a time limit */
     try {
-      const p = R.checkPermissions ? await R.checkPermissions() : null;
-      if (!p || p.speechRecognition !== "granted"){ const q = await R.requestPermissions(); if (q && q.speechRecognition && q.speechRecognition !== "granted"){ toast(T("micDenied", APP)); return "nomic"; } }
-      hp = await R.addListener("partialResults", d => { const k = hfParse((d && (d.matches || d.value)) || []); if (k && !got){ got = k; R.stop().catch(() => {}); } });
-      try { hs = await R.addListener("listeningState", d => { if (d && d.status === "stopped") ended = true; }); } catch(e){}
-      const r = await withTimeout(R.start({language: lang, maxResults: 5, partialResults: true, popup: false}), 8000, null);
-      if (!got && r && r.matches) got = hfParse(r.matches);
-      const t0 = Date.now();
-      while (!got && !ended && Date.now() - t0 < 7000) await hfSleep(150);
-      if (!got) await hfSleep(400);
-    } catch(e){}
-    try { await R.stop(); } catch(e){}
-    try { hp && hp.remove(); hs && hs.remove(); } catch(e){}
-    return got;
+      const p = R.checkPermissions ? await withTimeout(R.checkPermissions(), 3000, null) : null;
+      if (!p || p.speechRecognition !== "granted"){ const q = await withTimeout(R.requestPermissions(), 15000, null); if (q && q.speechRecognition && q.speechRecognition !== "granted"){ toast(T("micDenied", APP)); return "nomic"; } }
+      const r = await withTimeout(R.start({language: lang, maxResults: 5, prompt: T("hfStListen"), partialResults: false, popup: true}), 12000, null);
+      const m = (r && r.matches) || [];
+      hf.heard = m[0] || ""; if (view === "session") render();
+      return hfParse(m);
+    } catch(e){ hf.heard = ""; return null; }
+    finally { withTimeout(R.stop(), 1000, null); }
   }
   const W = window.SpeechRecognition || window.webkitSpeechRecognition; if (!W) return "nomic";
   return new Promise(resolve => {
     let done = false; const fin = v => { if (!done){ done = true; try { r.stop(); } catch(e){} resolve(v); } };
     const r = new W(); r.lang = lang; r.maxAlternatives = 5; r.interimResults = true; r.continuous = false;
-    r.onresult = e => { for (let i = e.resultIndex || 0; i < e.results.length; i++){ const k = hfParse([...e.results[i]].map(a => a.transcript)); if (k) return fin(k); } };
+    r.onresult = e => { for (let i = e.resultIndex || 0; i < e.results.length; i++){ const al = [...e.results[i]].map(a => a.transcript); hf.heard = al[0] || ""; const k = hfParse(al); if (k) return fin(k); } };
     r.onerror = e => fin(e && e.error === "not-allowed" ? "nomic" : null);
     r.onend = () => fin(null);
     try { r.start(); } catch(e){ fin(null); }
@@ -3024,9 +3020,9 @@ async function hfBegin(){
       hf.state = "listen"; render();
       await sayWait(T(tries ? "hfAgain" : "hfAsk"), ui);
       if (!hfAlive(tok) || sess.cur !== id) break;
-      hf.tapped = null;
+      hf.tapped = null; hf.heard = "";
       res = await Promise.race([hear(), (async () => { while (!hf.tapped && hfAlive(tok)) await hfSleep(150); return hf.tapped; })()]);
-      try { const R = plug("SpeechRecognition"); if (R) await R.stop(); } catch(e){}
+      try { const R = plug("SpeechRecognition"); if (R) await withTimeout(R.stop(), 1000, null); } catch(e){}
       if (res === "nomic"){ hfStop(); toast(T("hfNoMic")); return; }
       if (res === "repeat"){ await hfSide(promptSide(c), c); await hfSide(answerSide(c), c); res = null; tries--; continue; }
       if (res === "stop"){ hfStop(); endSession("limit"); return; }
@@ -3045,6 +3041,7 @@ function hfBanner(){
   if (!hf.on) return "";
   const msg = {q: T("hfStQ"), think: T("hfStThink"), a: T("hfStA"), listen: T("hfStListen"), wait: T("hfStWait")}[hf.state] || "";
   return `<div class="banner stack" style="gap:6px"><strong>🎧 ${T("hfTitle")}</strong><p class="big" style="margin:0;font-size:1.3rem">${msg}</p>
+    ${hf.heard ? `<p class="small" style="margin:0">👂 ${T("hfHeard")} « ${esc(hf.heard)} »</p>` : ""}
     ${hf.state === "listen" ? `<div class="gradebar"><button class="ok" data-act="hfOk">✓ ${T("knewIt")}</button><button class="ko" data-act="hfKo">✗ ${T("toReviewAgain")}</button></div>` : ""}
     <p class="muted small" style="margin:0">${T("hfHelp")}</p><button class="btn secondary block" data-act="hfStop">⏹ ${T("hfStopBtn")}</button></div>`;
 }
