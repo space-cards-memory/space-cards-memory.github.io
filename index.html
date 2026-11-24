@@ -2382,7 +2382,7 @@ Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhon
 const M = 60e3, H = 60 * M, D = 24 * H;
 const IV = [10*M, H, D, 2*D, 5*D, 8*D, 15*D, 21*D, 30*D, 45*D, 60*D, 90*D, 180*D, 365*D];
 const APP = "Space Cards Memory";
-const BUILD = "2026-11-24 17:45";
+const BUILD = "2026-11-24 18:15";
 /* extension points used by optional modules (the personal build adds the recall table) */
 const EXT = {views:{}, noNav:["age"], notifs:[], actions:{}, actionTypes:[], label:"", navOf:{}};
 /* code, endonym, speech locale */
@@ -5490,7 +5490,10 @@ function grpMore(){
 }
 
 /* home: the group, plainly visible, with its own button */
-function grpHomeCard(now){
+/* for a subject (bridge…), "words" become "questions" */
+function qWords(h){ if (!isSubj()) return h; if (UI === "fr") return h.replace(/\bnouveaux mots\b/g, "nouvelles questions").replace(/\bmots\b/g, "questions").replace(/\bmot\b/g, "question"); if (UI === "en") return h.replace(/\bwords\b/g, "questions").replace(/\bword\b/g, "question"); return h; }
+function grpHomeCard(now){ return qWords(grpHomeCard0(now)); }
+function grpHomeCard0(now){
   const st = grpState(now), g = grp(), n = st.toLoop.length || (st.canOpen ? Math.min(g.size, st.stock) : 0);
   const hard = S.cards.filter(isHard).length, used = budgetUsed(now);
   const sizes = st.toLoop.length || !st.canOpen ? "" : `<div class="row" style="gap:8px;align-items:center"><span class="small">${T("howMany")}</span><div class="seg" role="group" aria-label="${T("howMany")}" style="flex:1">${[3, 5, 10].map(k => `<button data-gsize="${k}" aria-pressed="${g.size === k}">${k}</button>`).join("")}</div></div>`;
@@ -5613,7 +5616,8 @@ function relearnCur(){
 }
 
 /* end of a group: another one now, or when it comes */
-function grpAfterBlock(){
+function grpAfterBlock(){ return qWords(grpAfterBlock0()); }
+function grpAfterBlock0(){
   const now = Date.now(), st = grpState(now), g = grp();
   if (st.canOpen) return `<button class="btn block big" data-act="nextGrp">${T("gMore", Math.min(g.size, st.stock))}</button>`;
   if (st.cur.length && !st.toLoop.length) return `<p class="info">${T("gHomeWait", st.num, st.ok, st.cur.length, whenText())}</p>`;
