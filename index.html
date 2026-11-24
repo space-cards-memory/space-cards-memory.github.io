@@ -2368,13 +2368,17 @@ Object.assign(I18N.fr, {webDlTitle: "Traduction automatique sur cet ordinateur",
 Object.assign(I18N.en, {webDlTitle: "Automatic translation on this computer", webDlHelp: "Your browser can translate on the computer itself, without sending anything online. It must first download the language, once.", webDlBtn: "Turn on translation", webDlBusy: "Downloading the language…", webDlReady: "Language ready: translating now.", webDlFail: "The download did not work. Translation will use the online service (adults only)."});
 Object.assign(I18N.fr, {mtYesWeb: "✓ sur l'ordinateur avec Chrome ou Edge (sans rien envoyer) ; sinon par un service gratuit en ligne, pour les adultes"});
 Object.assign(I18N.en, {mtYesWeb: "✓ on the computer with Chrome or Edge (nothing sent); otherwise through a free online service, for adults"});
-Object.assign(I18N.fr, {calTitle: "Rappels dans mon calendrier", calHelp: "Sur iPhone, iPad et Mac, l'app ne peut pas sonner toute seule : chaque séance devient un rendez-vous qui se répète chaque semaine, avec une alerte. Ouvre le fichier et accepte l'ajout au calendrier. Si tu changes tes créneaux, supprime d'abord les anciens rendez-vous « Space Cards » (« tous les événements futurs »), puis refais-le.", calBtn: "📅 Ajouter mes créneaux à mon calendrier", calEvent: "🚀 Space Cards : séance de révision", calDesc: "Ouvre Space Cards Memory pour ta séance.", calNone: "Aucun créneau à ajouter : règle d'abord tes créneaux.", calDone: "Fichier prêt : ouvre-le pour ajouter tes séances au calendrier.", calFail: "Le fichier n'a pas pu être créé."});
-Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhone, iPad and Mac, the app cannot ring by itself: each session becomes a weekly event with an alert. Open the file and accept adding it to your calendar. If you change your slots, first delete the old \"Space Cards\" events (\"all future events\"), then do it again.", calBtn: "📅 Add my time slots to my calendar", calEvent: "🚀 Space Cards: review session", calDesc: "Open Space Cards Memory for your session.", calNone: "No slot to add: set your time slots first.", calDone: "File ready: open it to add your sessions to your calendar.", calFail: "The file could not be created."});
+Object.assign(I18N.fr, {calStaleTitle: "Tes créneaux ont changé", calStaleHelp: "Ton calendrier a encore les anciens rappels, et l'app ne peut pas les effacer elle-même. Dans l'app Calendrier : Calendriers › ⓘ à côté de « Space Cards » › Supprimer le calendrier, puis recrée un calendrier « Space Cards ». Ensuite, touche le bouton ci-dessous et range les nouveaux rappels dans ce calendrier.", calStaleBtn: "Mettre à jour mes rappels", calStaleSkip: "Je n'utilise pas le calendrier"});
+Object.assign(I18N.en, {calStaleTitle: "Your time slots have changed", calStaleHelp: "Your calendar still has the old reminders, and the app cannot delete them itself. In the Calendar app: Calendars › ⓘ next to \"Space Cards\" › Delete Calendar, then create a \"Space Cards\" calendar again. Then tap the button below and put the new reminders in that calendar.", calStaleBtn: "Update my reminders", calStaleSkip: "I don't use the calendar"});
+Object.assign(I18N.fr, {remindBtn: (h, r) => `Me rappeler ma prochaine révision à ${h} (${r})`, remindEvent: "🔁 Space Cards : révision à faire", remindDone: "Ouvre le fichier et touche « Ajouter » : ton calendrier sonnera à l'heure."});
+Object.assign(I18N.en, {remindBtn: (h, r) => `Remind me of my next review at ${h} (${r})`, remindEvent: "🔁 Space Cards: review due", remindDone: "Open the file and tap \"Add\": your calendar will ring on time."});
+Object.assign(I18N.fr, {calTitle: "Rappels dans mon calendrier", calHelp: "Sur iPhone, iPad et Mac, l'app ne peut pas sonner toute seule : chaque séance devient un rendez-vous qui se répète chaque semaine, avec une alerte. Conseil : crée d'abord dans l'app Calendrier un calendrier « Space Cards » et ranges-y les rappels, tu pourras ainsi tous les effacer d'un geste. Ouvre ensuite le fichier et accepte l'ajout.", calBtn: "📅 Ajouter mes créneaux à mon calendrier", calEvent: "🚀 Space Cards : séance de révision", calDesc: "Ouvre Space Cards Memory pour ta séance.", calNone: "Aucun créneau à ajouter : règle d'abord tes créneaux.", calDone: "Fichier prêt : ouvre-le pour ajouter tes séances au calendrier.", calFail: "Le fichier n'a pas pu être créé."});
+Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhone, iPad and Mac, the app cannot ring by itself: each session becomes a weekly event with an alert. Open the file and accept adding it to your calendar. Tip: first create a \"Space Cards\" calendar in the Calendar app and put the reminders there, so you can delete them all at once.", calBtn: "📅 Add my time slots to my calendar", calEvent: "🚀 Space Cards: review session", calDesc: "Open Space Cards Memory for your session.", calNone: "No slot to add: set your time slots first.", calDone: "File ready: open it to add your sessions to your calendar.", calFail: "The file could not be created."});
 
 const M = 60e3, H = 60 * M, D = 24 * H;
 const IV = [10*M, H, D, 2*D, 5*D, 8*D, 15*D, 21*D, 30*D, 45*D, 60*D, 90*D, 180*D, 365*D];
 const APP = "Space Cards Memory";
-const BUILD = "2026-11-21 17:15";
+const BUILD = "2026-11-24 15:15";
 /* extension points used by optional modules (the personal build adds the recall table) */
 const EXT = {views:{}, noNav:["age"], notifs:[], actions:{}, actionTypes:[], label:"", navOf:{}};
 /* code, endonym, speech locale */
@@ -3101,7 +3105,9 @@ function renderHome(){
     ${S.cards.some(c => c.mt) ? `<button class="mtnote" data-act="goMtCheck">⚠️ ${T("mtNoteHome", S.cards.filter(c => c.mt).length)}</button>` : ""}
     ${progressBox()}
     ${statusSwitch()}
+    ${calStaleBanner()}
     ${loadLine()}
+    ${remindBlock()}
     ${grpOn() && cStatus() === "active" ? grpHomeCard(now) : ""}
     ${S.cards.length ? `<button class="btn block big" data-act="prep">${canStart ? T("reviewNowN", dueCards.length + Math.min(waiting.length, newLeftToday(now))) : T("reviewNow")}</button>` : ""}
     <section class="hero">
@@ -3504,6 +3510,7 @@ function renderSession(){
         ${pauseUntil > now ? `<p class="big num" id="pause-clock" style="margin:0">${clock(pauseUntil - now)}</p><p class="muted small">${T("pauseRunning")}</p>`
           : `<button class="btn block" data-act="pause5">${T("pauseStart")}</button>`}</div>` : ""}
       ${sess.reason === "grp" ? grpAfterBlock() : ""}
+      ${remindBlock()}
       ${sess.reason === "grp" && grpRevLeft() && capLeft >= 2 ? `<button class="btn block" data-act="contRev">${T("gContRev", grpRevLeft())}</button>` : ""}
       ${grpOn() && sess.reason !== "grp" ? grpEndBlock(capLeft) : ""}
       ${!grpOn() && cStatus() === "active" && sess.reason !== "cap" && capLeft >= 2 && S.cards.some(isNew) ? `<div class="stack" style="gap:6px"><span class="muted small">${T("moreNew", S.cards.filter(isNew).length)}</span>
@@ -3912,6 +3919,8 @@ document.addEventListener("click", async e => {
   if (a === "relearnCur") return relearnCur();
   if (a === "webDl") return webDownload();
   if (a === "calExport") return calExport();
+  if (a === "calStaleOff"){ S.calStale = false; save(); return render(); }
+  if (a === "remindNext") return remindNext(t.dataset.at);
   if (a === "relearnHard"){ const n = relearnIds(S.cards.filter(isHard).map(c => c.id)); save(); render(); return toast(T("relearnDone", n)); }
   if (a === "selRelearn"){ const n = relearnIds([...sel]); sel = new Set(); selMode = false; listTodo = false; save(); render(); return toast(T("relearnDone", n)); }
   if (a === "listHard"){ listTodo = listTodo === "hard" ? false : "hard"; return render(); }
@@ -3933,6 +3942,8 @@ document.addEventListener("click", async e => {
     const bad = DAYS.some(d => draft.slots[d].some(s => slotProblem(s[0], s[1], draft)));
     if (bad){ render(); return toast(T("fixSlots")); }
     DAYS.forEach(d => draft.slots[d].sort((x, y) => toMin(x[0]) - toMin(y[0])));
+    const calKey = x => JSON.stringify([x.slots, x.gap, x.silenceStart, x.silenceEnd]);
+    if (isApple && S.calMade && calKey(S.settings) !== calKey(draft)) S.calStale = true;
     Object.assign(S.settings, {slots: draft.slots, gap: draft.gap, silenceStart: draft.silenceStart, silenceEnd: draft.silenceEnd, courseDays: draft.courseDays});
     delete dayLog(Date.now()).dose;
     save(); draft = null; go("home"); return toast(T("planningSaved"));
@@ -5394,8 +5405,39 @@ function grpAfterBlock(){
    (a page cannot ring by itself once closed). Weekly events with an alert, nothing sent anywhere. ---------- */
 /* only on Apple devices (iPhone, iPad, Mac): Android has real notifications */
 const isApple = !Native && /iPhone|iPad|iPod|Macintosh|Mac OS X/i.test(navigator.userAgent || "");
+/* a one-off reminder for my next review (10 min, 1 h…): on Apple devices the calendar rings for the app */
+function nextDueAll(now){
+  let m = Infinity;
+  ((S.courses && S.courses.length) ? S.courses : [{id: S.active}]).forEach(c => { if (typeof cStatus === "function" && cStatus(c) === "pause") return; const t = c.id === S.active || !c.id ? nextDue(now) : withCourse(c.id, () => nextDue(now)); if (t < m) m = t; });
+  return m;
+}
+function remindBlock(){
+  if (!isApple) return "";
+  const now = Date.now(), t = nextDueAll(now);
+  if (!isFinite(t) || t - now > 2 * D) return "";
+  const d = new Date(t), hm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  return `<button class="btn secondary block" data-act="remindNext" data-at="${t}">⏰ ${T("remindBtn", hm, rel(t - now))}</button>`;
+}
+function remindNext(t){
+  t = +t; if (!t) return;
+  const pad = n => String(n).padStart(2, "0"), d = new Date(t), e = new Date(t + 10 * M);
+  const f = x => x.getFullYear() + pad(x.getMonth() + 1) + pad(x.getDate()) + "T" + pad(x.getHours()) + pad(x.getMinutes()) + "00";
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, ""), url = location.protocol === "https:" ? location.href.split("#")[0] : "";
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Space Cards Memory//FR", "BEGIN:VEVENT", `UID:spacecards-rev-${t}@space-cards-memory`, `DTSTAMP:${stamp}`,
+    `DTSTART:${f(d)}`, `DTEND:${f(e)}`, `SUMMARY:${T("remindEvent")}`, `DESCRIPTION:${T("calDesc")}`, url ? `URL:${url}` : "",
+    "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${T("remindEvent")}`, "TRIGGER:PT0M", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].filter(Boolean).join("\r\n") + "\r\n";
+  saveFile("space-cards-rappel.ics", ics).then(() => toast(T("remindDone"))).catch(() => toast(T("calFail")));
+}
+/* slots changed after the reminders were added: the app cannot touch the calendar, so it says what to do */
+function calStaleBanner(){
+  if (!isApple || !S.calStale) return "";
+  return `<div class="banner stack"><strong>📅 ${T("calStaleTitle")}</strong><p class="small" style="margin:0">${T("calStaleHelp")}</p>
+    <button class="btn block" data-act="calExport">📅 ${T("calStaleBtn")}</button>
+    <button class="btn ghost small" data-act="calStaleOff" style="align-self:center">${T("calStaleSkip")}</button></div>`;
+}
 function calBlock(){
   if (!isApple) return "";
+  if (S.calStale) return calStaleBanner();
   return `<section class="stack"><h3>📅 ${T("calTitle")}</h3><p class="muted small">${T("calHelp")}</p>
     <button class="btn secondary block" data-act="calExport">${T("calBtn")}</button></section>`;
 }
@@ -5424,7 +5466,7 @@ function calExport(){
   });
   if (!ev.length) return toast(T("calNone"));
   const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Space Cards Memory//FR", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Space Cards Memory", ...ev, "END:VCALENDAR"].join("\r\n") + "\r\n";
-  saveFile("space-cards-creneaux.ics", ics).then(() => toast(T("calDone"))).catch(() => toast(T("calFail")));
+  saveFile("space-cards-creneaux.ics", ics).then(() => { S.calMade = true; S.calStale = false; save(); if (view !== "session") render(); toast(T("calDone")); }).catch(() => toast(T("calFail")));
 }
 
 
