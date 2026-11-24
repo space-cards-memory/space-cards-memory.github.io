@@ -2368,6 +2368,8 @@ Object.assign(I18N.fr, {webDlTitle: "Traduction automatique sur cet ordinateur",
 Object.assign(I18N.en, {webDlTitle: "Automatic translation on this computer", webDlHelp: "Your browser can translate on the computer itself, without sending anything online. It must first download the language, once.", webDlBtn: "Turn on translation", webDlBusy: "Downloading the language…", webDlReady: "Language ready: translating now.", webDlFail: "The download did not work. Translation will use the online service (adults only)."});
 Object.assign(I18N.fr, {mtYesWeb: "✓ sur l'ordinateur avec Chrome ou Edge (sans rien envoyer) ; sinon par un service gratuit en ligne, pour les adultes"});
 Object.assign(I18N.en, {mtYesWeb: "✓ on the computer with Chrome or Edge (nothing sent); otherwise through a free online service, for adults"});
+Object.assign(I18N.fr, {hfTitle: "Mains libres", hfStart: "Réviser les mains libres", hfWaitLbl: "Temps pour répondre", hfPrepHelp: "L'app lit la question, te laisse le temps de répondre à voix haute, lit la réponse, puis te demande : dis « oui » si tu savais, « non » sinon. « Répète » pour réécouter, « stop » pour arrêter. En voiture, ne regarde pas l'écran.", hfIntro: "Mode mains libres. Après chaque réponse, dis oui si tu savais, non sinon. Dis répète pour réécouter, ou stop pour arrêter.", hfAsk: "Tu savais ?", hfAgain: "Je n'ai pas compris. Dis oui ou non.", hfOk: "Bravo.", hfKo: "D'accord, on la reverra.", hfAssumeKo: "Je n'ai pas compris, je la remets à revoir.", hfEnd: "Séance terminée. Bravo !", hfStQ: "🔊 Écoute la question…", hfStThink: "💭 À toi de répondre…", hfStA: "🔊 La réponse…", hfStListen: "🎤 Dis « oui » ou « non »", hfStWait: "⏳ Prochaine carte dans un instant…", hfHelp: "« répète » pour réécouter · « stop » pour arrêter", hfStopBtn: "Arrêter les mains libres", hfNoMic: "Le micro n'est pas disponible : mains libres arrêté.", hfNothing: "Rien à réviser pour l'instant."});
+Object.assign(I18N.en, {hfTitle: "Hands-free", hfStart: "Review hands-free", hfWaitLbl: "Time to answer", hfPrepHelp: "The app reads the question, gives you time to answer aloud, reads the answer, then asks: say \"yes\" if you knew it, \"no\" otherwise. \"Repeat\" to hear it again, \"stop\" to end. While driving, don't look at the screen.", hfIntro: "Hands-free mode. After each answer, say yes if you knew it, no otherwise. Say repeat to hear it again, or stop to end.", hfAsk: "Did you know it?", hfAgain: "I didn't understand. Say yes or no.", hfOk: "Well done.", hfKo: "Okay, we'll see it again.", hfAssumeKo: "I didn't understand, I'll put it back for review.", hfEnd: "Session over. Well done!", hfStQ: "🔊 Listen to the question…", hfStThink: "💭 Your turn to answer…", hfStA: "🔊 The answer…", hfStListen: "🎤 Say \"yes\" or \"no\"", hfStWait: "⏳ Next card in a moment…", hfHelp: "\"repeat\" to hear again · \"stop\" to end", hfStopBtn: "Stop hands-free", hfNoMic: "The microphone is not available: hands-free stopped.", hfNothing: "Nothing to review right now."});
 Object.assign(I18N.fr, {voiceTitle: "Voix", voiceHelp: "Choisis la voix de chaque langue et écoute-la avec ▶. Les voix marquées ★ sont les plus naturelles. Pour en avoir d'autres sur iPhone, iPad ou Mac : Réglages de l'appareil › Accessibilité › Contenu énoncé › Voix, puis ferme et rouvre l'app.", voiceTest: "Écouter", voiceNone: "Aucune voix sur cet appareil pour cette langue (tes enregistrements restent lus)."});
 Object.assign(I18N.en, {voiceTitle: "Voices", voiceHelp: "Choose the voice for each language and listen with ▶. Voices marked ★ sound most natural. For more voices on iPhone, iPad or Mac: device Settings › Accessibility › Spoken Content › Voices, then close and reopen the app.", voiceTest: "Listen", voiceNone: "No voice on this device for this language (your recordings are still played)."});
 Object.assign(I18N.fr, {calStaleTitle: "Tes créneaux ont changé", calStaleHelp: "Ton calendrier a encore les anciens rappels, et l'app ne peut pas les effacer elle-même. Dans l'app Calendrier : Calendriers › ⓘ à côté de « Space Cards » › Supprimer le calendrier, puis recrée un calendrier « Space Cards ». Ensuite, touche le bouton ci-dessous et range les nouveaux rappels dans ce calendrier.", calStaleBtn: "Mettre à jour mes rappels", calStaleSkip: "Je n'utilise pas le calendrier"});
@@ -2380,7 +2382,7 @@ Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhon
 const M = 60e3, H = 60 * M, D = 24 * H;
 const IV = [10*M, H, D, 2*D, 5*D, 8*D, 15*D, 21*D, 30*D, 45*D, 60*D, 90*D, 180*D, 365*D];
 const APP = "Space Cards Memory";
-const BUILD = "2026-11-24 16:30";
+const BUILD = "2026-11-24 17:15";
 /* extension points used by optional modules (the personal build adds the recall table) */
 const EXT = {views:{}, noNav:["age"], notifs:[], actions:{}, actionTypes:[], label:"", navOf:{}};
 /* code, endonym, speech locale */
@@ -2913,6 +2915,133 @@ async function applyAud(c){
 }
 function resetAud(){ if (rec) { rec.onstop = null; try { rec.stop(); } catch(e){} recStream && recStream.getTracks().forEach(t => t.stop()); rec = null; clearInterval(recTick); } formAud = {blob:null, removed:false}; }
 
+
+/* ---------- Hands-free reviews (driving, walking…): the app reads the question, gives time to answer aloud,
+   reads the answer, then listens for "oui" / "non". Only the yes/no is recognised: the user judges. ---------- */
+const hf = {on: false, tok: 0, state: "", until: 0, lock: null};
+const hfSleep = ms => new Promise(r => setTimeout(r, ms));
+function hfAlive(tok){ return hf.on && hf.tok === tok && view === "session" && sess && !sess.ended; }
+function hfPossible(){ return !isMinor() && !!(plug("SpeechRecognition") || window.SpeechRecognition || window.webkitSpeechRecognition); }
+async function sayWait(text, code){
+  text = String(text || "").trim(); if (!text) return false;
+  const c = await getCaps(code); if (c.tts === false) return false;
+  const P = plug("TextToSpeech");
+  try {
+    if (player) player.pause();
+    if (P){ await P.stop().catch(() => {}); await P.speak({text, lang: bcp(code), rate: 0.9, category: "playback"}); return true; }
+    if (window.speechSynthesis){
+      const u = new SpeechSynthesisUtterance(text); u.lang = bcp(code); u.rate = 0.95;
+      const v = pickVoice(code, await webVoices()); if (v) u.voice = v;
+      await new Promise(res => { u.onend = res; u.onerror = res; speechSynthesis.cancel(); speechSynthesis.speak(u); setTimeout(res, 2500 + text.length * 120); });
+      return true;
+    }
+  } catch(e){}
+  return false;
+}
+async function playAudWait(id){
+  try {
+    const b = await idbGet("a_" + id); if (!b) return false;
+    stopSpeech(); if (player){ player.pause(); URL.revokeObjectURL(player.src); }
+    player = new Audio(URL.createObjectURL(b));
+    await new Promise(res => { player.onended = res; player.onerror = res; player.play().catch(res); setTimeout(res, 15000); });
+    return true;
+  } catch(e){ return false; }
+}
+async function hfSide(side, c){
+  if (!side || !side.text) return false;
+  if (side.target && c.aud && await playAudWait(c.id)) return true;
+  const tgt = S.settings.target;
+  if (side.target && tgt && tgt.name && !tgt.subject) return false;
+  return sayWait(side.text, side.code);
+}
+const HF_WORDS = {
+  ko: /\b(non|nan|faux|pas su|savais pas|sais pas|revoir|rate|perdu|no|wrong|nope)\b/,
+  ok: /\b(oui|ouais|ouai|juste|bon|bonne|correct|exact|su|savais|gagne|yes|yeah|right|ok|okay)\b/,
+  repeat: /\b(repete|repeter|repetes|encore|redis|again|repeat)\b/,
+  stop: /\b(stop|arrete|arreter|termine|fin|pause)\b/
+};
+function hfParse(list){
+  for (const raw of list || []){
+    const s = " " + String(raw).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z' ]/g, " ") + " ";
+    for (const k of ["stop", "repeat", "ko", "ok"]) if (HF_WORDS[k].test(s)) return k;
+  }
+  return null;
+}
+async function hear(){
+  const lang = bcp(UI === "ar" || UI === "tr" ? "fr" : UI), R = plug("SpeechRecognition");
+  if (R){
+    try {
+      const p = R.checkPermissions ? await R.checkPermissions() : null;
+      if (!p || p.speechRecognition !== "granted"){ const q = await R.requestPermissions(); if (q && q.speechRecognition && q.speechRecognition !== "granted"){ toast(T("micDenied", APP)); return "nomic"; } }
+      const res = await withTimeout(R.start({language: lang, maxResults: 5, partialResults: false, popup: false}), 9000, null);
+      try { await R.stop(); } catch(e){}
+      return hfParse(res && res.matches);
+    } catch(e){ return null; }
+  }
+  const W = window.SpeechRecognition || window.webkitSpeechRecognition; if (!W) return "nomic";
+  return new Promise(resolve => {
+    let done = false; const fin = v => { if (!done){ done = true; try { r.stop(); } catch(e){} resolve(v); } };
+    const r = new W(); r.lang = lang; r.maxAlternatives = 5; r.interimResults = false; r.continuous = false;
+    r.onresult = e => fin(hfParse([...e.results[0]].map(a => a.transcript)));
+    r.onerror = e => fin(e && e.error === "not-allowed" ? "nomic" : null);
+    r.onend = () => fin(null);
+    try { r.start(); } catch(e){ fin(null); }
+    setTimeout(() => fin(null), 8000);
+  });
+}
+async function hfBegin(){
+  if (!sess || sess.ended) return;
+  hf.on = true; const tok = ++hf.tok;
+  try { if (navigator.wakeLock) hf.lock = await navigator.wakeLock.request("screen"); } catch(e){}
+  render();
+  await sayWait(T("hfIntro"), UI === "ar" || UI === "tr" ? SK() : UI);
+  const ui = UI === "ar" || UI === "tr" ? SK() : UI;
+  while (hfAlive(tok)){
+    if (!sess.cur){ if (sess.waitUntil){ hf.state = "wait"; await hfSleep(1000); continue; } break; }
+    const c = card(sess.cur); if (!c) break; const id = c.id;
+    hf.state = "q"; render();
+    await hfSide(promptSide(c), c);
+    if (!hfAlive(tok) || sess.cur !== id) continue;
+    const wait = S.settings.hfWait || 5;
+    hf.state = "think"; hf.until = Date.now() + wait * 1000; render();
+    await hfSleep(wait * 1000);
+    if (!hfAlive(tok) || sess.cur !== id) continue;
+    sess.flipped = true; hf.state = "a"; render();
+    await hfSide(answerSide(c), c);
+    let res = null;
+    for (let tries = 0; tries < 3 && hfAlive(tok) && sess.cur === id; tries++){
+      hf.state = "listen"; render();
+      await sayWait(T(tries ? "hfAgain" : "hfAsk"), ui);
+      if (!hfAlive(tok) || sess.cur !== id) break;
+      res = await hear();
+      if (res === "nomic"){ hfStop(); toast(T("hfNoMic")); return; }
+      if (res === "repeat"){ await hfSide(promptSide(c), c); await hfSide(answerSide(c), c); res = null; tries--; continue; }
+      if (res === "stop"){ hfStop(); endSession("limit"); return; }
+      if (res === "ok" || res === "ko") break;
+    }
+    if (!hfAlive(tok) || sess.cur !== id) continue;
+    if (res !== "ok" && res !== "ko"){ res = "ko"; await sayWait(T("hfAssumeKo"), ui); }
+    else await sayWait(T(res === "ok" ? "hfOk" : "hfKo"), ui);
+    if (!hfAlive(tok) || sess.cur !== id) continue;
+    sess.grades[TK()] = res; validate();
+  }
+  if (hf.tok === tok){ const ended = sess && sess.ended; hfStop(); if (ended) sayWait(T("hfEnd"), ui); }
+}
+function hfStop(){ hf.on = false; hf.tok++; hf.state = ""; try { hf.lock && hf.lock.release(); } catch(e){} hf.lock = null; stopSpeech(); if (player) player.pause(); if (view === "session") render(); }
+function hfBanner(){
+  if (!hf.on) return "";
+  const msg = {q: T("hfStQ"), think: T("hfStThink"), a: T("hfStA"), listen: T("hfStListen"), wait: T("hfStWait")}[hf.state] || "";
+  return `<div class="banner stack" style="gap:6px"><strong>🎧 ${T("hfTitle")}</strong><p class="big" style="margin:0;font-size:1.3rem">${msg}</p>
+    <p class="muted small" style="margin:0">${T("hfHelp")}</p><button class="btn secondary block" data-act="hfStop">⏹ ${T("hfStopBtn")}</button></div>`;
+}
+function hfPrepBlock(){
+  if (!hfPossible()) return "";
+  const w = S.settings.hfWait || 5;
+  return `<button class="btn secondary block big" data-act="startHF">🎧 ${T("hfStart")}</button>
+    <div class="row" style="gap:8px;align-items:center;justify-content:center"><span class="small muted">${T("hfWaitLbl")}</span><div class="seg" role="group" aria-label="${T("hfWaitLbl")}">${[3, 5, 8].map(n => `<button data-hfwait="${n}" aria-pressed="${w === n}">${n} s</button>`).join("")}</div></div>
+    <p class="muted small" style="text-align:center;margin:0">${T("hfPrepHelp")}</p>`;
+}
+
 /* ---------- Phone voices: text-to-speech and dictation ---------- */
 function plug(name){
   try {
@@ -3303,7 +3432,7 @@ function renderPrep(){
       <h1>${T("nRev", due)} · ${T("nNew", neu)}${freeN ? " · " + T("nFree", freeN) : ""}</h1>
       <p class="muted">${prep.theme ? T("targetedHelp") : T("orderHelp")}</p></header>
     ${due + neu + freeN || (prep.chain && otherWork([S.active]).length) ? `<button class="btn block big" data-act="start">${T("startBtn", prep.val, unit)}</button>
-      <p class="muted small" style="text-align:center;margin-top:-6px">${prepSummary()}</p>` : ""}
+      <p class="muted small" style="text-align:center;margin-top:-6px">${prepSummary()}</p>${hfPrepBlock()}` : ""}
     ${fold("prep-opts", "⚙️ " + T("sessionOptions"), `
     <div class="field"><label for="p-theme">${T("cardsLbl")}</label>
       <select id="p-theme"><option value="">${T("allCards")}</option><option value="*" ${prep.theme === "*" ? "selected" : ""}>${T("allFree")}</option>${themes().map(t => `<option value="${esc(t)}" ${prep.theme === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></div>
@@ -3425,7 +3554,7 @@ function nextCard(){
     sess.curDir = sess.dir === "alt" ? (sess.shown % 2 ? "bw" : "fw") : sess.dir; if (isCloze(c)) sess.curDir = "fw"; sess.shown++;
     render();
     /* every question mode says the question aloud: "text" shows text + image and plays the voice too */
-    if (voiceOnly(c) || (sess.ask === "text" && canVoice(promptSide(c), c))) playPrompt(c);
+    if (!hf.on && (voiceOnly(c) || (sess.ask === "text" && canVoice(promptSide(c), c)))) playPrompt(c);
     return;
   }
   if (sess.pending.length){
@@ -3596,7 +3725,7 @@ function renderSession(){
   const counter = sess.mode === "qty" ? T("qtyCounter", sess.done.length, sess.qty) : T("seenCounter", sess.done.length);
   const top = `<div class="topbar"><span class="row" style="gap:4px"><button class="btn ghost" data-act="quit">${T("finish")}</button>${sess.undo ? `<button class="btn ghost small" data-act="undoLast" aria-label="${T("undoLast")}">↶ ${T("undoShort")}</button>` : ""}</span>
     <span class="muted num small">${counter}</span>
-    <span class="timer num" id="timer" aria-label="${T("timeLeft")}">${clock(stopAt() - now)}</span></div>`;
+    <span class="timer num" id="timer" aria-label="${T("timeLeft")}">${clock(stopAt() - now)}</span></div>` + hfBanner();
   if (grpActive()) return renderGroup(top);
   if (!sess.cur){
     app.innerHTML = top + `<div class="waiting stack"><span class="label">${T("nextCardIn")}</span><div class="big num" id="wait">${clock(sess.waitUntil - now)}</div>
@@ -3880,7 +4009,7 @@ function chooseLang(role, code, name){
   render(); window.scrollTo(0,0);
 }
 document.addEventListener("click", async e => {
-  const t = e.target.closest("[data-go],[data-act],[data-tab],[data-grade],[data-edit],[data-shift],[data-mode],[data-val],[data-gap],[data-addslot],[data-delslot],[data-skip],[data-unskip],[data-snooze],[data-extra],[data-playsrc],[data-playtgt],[data-dict],[data-lsrc],[data-ltgt],[data-pdir],[data-pask],[data-pans],[data-playside],[data-course],[data-primary],[data-askdelcourse],[data-delcourse],[data-pchain],[data-chain],[data-xpai],[data-more],[data-sugg],[data-gpick],[data-stat],[data-grpmode],[data-cstatus],[data-gsize]");
+  const t = e.target.closest("[data-go],[data-act],[data-tab],[data-grade],[data-edit],[data-shift],[data-mode],[data-val],[data-gap],[data-addslot],[data-delslot],[data-skip],[data-unskip],[data-snooze],[data-extra],[data-playsrc],[data-playtgt],[data-dict],[data-lsrc],[data-ltgt],[data-pdir],[data-pask],[data-pans],[data-playside],[data-course],[data-primary],[data-askdelcourse],[data-delcourse],[data-pchain],[data-chain],[data-xpai],[data-more],[data-sugg],[data-gpick],[data-stat],[data-grpmode],[data-cstatus],[data-gsize],[data-hfwait]");
   if (!t) return;
   if (t.dataset.go){ if (view === "session" && sess && !sess.ended) return; return go(t.dataset.go); }
   if (t.dataset.tab){ addTab = t.dataset.tab; multiPreview = null; return render(); }
@@ -3894,6 +4023,7 @@ document.addEventListener("click", async e => {
   if (t.dataset.more) return learnMore(t.dataset.more);
   if (t.dataset.gpick) return grpPick(+t.dataset.gpick);
   if (t.dataset.cstatus){ const c = activeCourse(); if (c){ c.status = t.dataset.cstatus === "active" ? undefined : t.dataset.cstatus; save(); } return render(); }
+  if (t.dataset.hfwait){ S.settings.hfWait = +t.dataset.hfwait; save(); return render(); }
   if (t.dataset.gsize){ S.settings.grp = Object.assign(grp(), {size: +t.dataset.gsize}); save(); return render(); }
   if (t.dataset.grpmode){ S.settings.grp = Object.assign(grp(), {on: t.dataset.grpmode === "grp"}); save(); return render(); }
   if (t.dataset.stat){ statsSel = t.dataset.stat; return render(); }
@@ -3979,6 +4109,8 @@ document.addEventListener("click", async e => {
   if (a === "dismissCourse"){ const lc = lastCourse(Date.now()); if (lc) S.dismissedCourse = lc.at; save(); return render(); }
   if (a === "errClose"){ const b = document.getElementById("errbox"); if (b) b.remove(); return; }
   if (a === "start") return startSession();
+  if (a === "startHF"){ hf.on = true; startSession(); if (sess && !sess.ended && sess.cur) hfBegin(); else { hf.on = false; toast(T("hfNothing")); } return; }
+  if (a === "hfStop") return hfStop();
   if (["gNext", "gPlay", "gFlip", "gOk", "gKo", "gCont"].includes(a)) return grpAct(a, t);
   if (a === "saveGrp") return saveGrp();
   if (a === "saveBudget"){ S.budget = +document.getElementById("bud").value || 0; save(); render(); return toast(T("settingsSaved")); }
@@ -4003,6 +4135,7 @@ document.addEventListener("click", async e => {
   if (a === "reviewAnyway"){ prep.theme = "*"; return startSession(); }
   if (a === "flip") return flip();
   if (a === "validate") return validate();
+  if (a === "quit" && hf.on) hfStop();
   if (a === "quit") return endSession("limit");
   if (a === "prolong") return prolong();
   if (a === "pause5") return startPause();
