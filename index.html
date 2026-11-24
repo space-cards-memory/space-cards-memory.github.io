@@ -2382,7 +2382,7 @@ Object.assign(I18N.en, {calTitle: "Reminders in my calendar", calHelp: "On iPhon
 const M = 60e3, H = 60 * M, D = 24 * H;
 const IV = [10*M, H, D, 2*D, 5*D, 8*D, 15*D, 21*D, 30*D, 45*D, 60*D, 90*D, 180*D, 365*D];
 const APP = "Space Cards Memory";
-const BUILD = "2026-11-24 17:15";
+const BUILD = "2026-11-24 17:45";
 /* extension points used by optional modules (the personal build adds the recall table) */
 const EXT = {views:{}, noNav:["age"], notifs:[], actions:{}, actionTypes:[], label:"", navOf:{}};
 /* code, endonym, speech locale */
@@ -2970,25 +2970,36 @@ function hfParse(list){
 async function hear(){
   const lang = bcp(UI === "ar" || UI === "tr" ? "fr" : UI), R = plug("SpeechRecognition");
   if (R){
+    /* Android: listen to partial results and stop as soon as "oui" / "non" is heard (the final result does not always come back) */
+    let got = null, ended = false, hp = null, hs = null;
     try {
       const p = R.checkPermissions ? await R.checkPermissions() : null;
       if (!p || p.speechRecognition !== "granted"){ const q = await R.requestPermissions(); if (q && q.speechRecognition && q.speechRecognition !== "granted"){ toast(T("micDenied", APP)); return "nomic"; } }
-      const res = await withTimeout(R.start({language: lang, maxResults: 5, partialResults: false, popup: false}), 9000, null);
-      try { await R.stop(); } catch(e){}
-      return hfParse(res && res.matches);
-    } catch(e){ return null; }
+      hp = await R.addListener("partialResults", d => { const k = hfParse((d && (d.matches || d.value)) || []); if (k && !got){ got = k; R.stop().catch(() => {}); } });
+      try { hs = await R.addListener("listeningState", d => { if (d && d.status === "stopped") ended = true; }); } catch(e){}
+      const r = await withTimeout(R.start({language: lang, maxResults: 5, partialResults: true, popup: false}), 8000, null);
+      if (!got && r && r.matches) got = hfParse(r.matches);
+      const t0 = Date.now();
+      while (!got && !ended && Date.now() - t0 < 7000) await hfSleep(150);
+      if (!got) await hfSleep(400);
+    } catch(e){}
+    try { await R.stop(); } catch(e){}
+    try { hp && hp.remove(); hs && hs.remove(); } catch(e){}
+    return got;
   }
   const W = window.SpeechRecognition || window.webkitSpeechRecognition; if (!W) return "nomic";
   return new Promise(resolve => {
     let done = false; const fin = v => { if (!done){ done = true; try { r.stop(); } catch(e){} resolve(v); } };
-    const r = new W(); r.lang = lang; r.maxAlternatives = 5; r.interimResults = false; r.continuous = false;
-    r.onresult = e => fin(hfParse([...e.results[0]].map(a => a.transcript)));
+    const r = new W(); r.lang = lang; r.maxAlternatives = 5; r.interimResults = true; r.continuous = false;
+    r.onresult = e => { for (let i = e.resultIndex || 0; i < e.results.length; i++){ const k = hfParse([...e.results[i]].map(a => a.transcript)); if (k) return fin(k); } };
     r.onerror = e => fin(e && e.error === "not-allowed" ? "nomic" : null);
     r.onend = () => fin(null);
     try { r.start(); } catch(e){ fin(null); }
     setTimeout(() => fin(null), 8000);
   });
 }
+/* while listening, big buttons still work (for anyone not driving) */
+function hfTap(res){ if (!hf.on || !sess || !sess.cur) return; hf.tapped = res; }
 async function hfBegin(){
   if (!sess || sess.ended) return;
   hf.on = true; const tok = ++hf.tok;
@@ -3013,7 +3024,9 @@ async function hfBegin(){
       hf.state = "listen"; render();
       await sayWait(T(tries ? "hfAgain" : "hfAsk"), ui);
       if (!hfAlive(tok) || sess.cur !== id) break;
-      res = await hear();
+      hf.tapped = null;
+      res = await Promise.race([hear(), (async () => { while (!hf.tapped && hfAlive(tok)) await hfSleep(150); return hf.tapped; })()]);
+      try { const R = plug("SpeechRecognition"); if (R) await R.stop(); } catch(e){}
       if (res === "nomic"){ hfStop(); toast(T("hfNoMic")); return; }
       if (res === "repeat"){ await hfSide(promptSide(c), c); await hfSide(answerSide(c), c); res = null; tries--; continue; }
       if (res === "stop"){ hfStop(); endSession("limit"); return; }
@@ -3032,6 +3045,7 @@ function hfBanner(){
   if (!hf.on) return "";
   const msg = {q: T("hfStQ"), think: T("hfStThink"), a: T("hfStA"), listen: T("hfStListen"), wait: T("hfStWait")}[hf.state] || "";
   return `<div class="banner stack" style="gap:6px"><strong>🎧 ${T("hfTitle")}</strong><p class="big" style="margin:0;font-size:1.3rem">${msg}</p>
+    ${hf.state === "listen" ? `<div class="gradebar"><button class="ok" data-act="hfOk">✓ ${T("knewIt")}</button><button class="ko" data-act="hfKo">✗ ${T("toReviewAgain")}</button></div>` : ""}
     <p class="muted small" style="margin:0">${T("hfHelp")}</p><button class="btn secondary block" data-act="hfStop">⏹ ${T("hfStopBtn")}</button></div>`;
 }
 function hfPrepBlock(){
@@ -4111,6 +4125,8 @@ document.addEventListener("click", async e => {
   if (a === "start") return startSession();
   if (a === "startHF"){ hf.on = true; startSession(); if (sess && !sess.ended && sess.cur) hfBegin(); else { hf.on = false; toast(T("hfNothing")); } return; }
   if (a === "hfStop") return hfStop();
+  if (a === "hfOk") return hfTap("ok");
+  if (a === "hfKo") return hfTap("ko");
   if (["gNext", "gPlay", "gFlip", "gOk", "gKo", "gCont"].includes(a)) return grpAct(a, t);
   if (a === "saveGrp") return saveGrp();
   if (a === "saveBudget"){ S.budget = +document.getElementById("bud").value || 0; save(); render(); return toast(T("settingsSaved")); }
